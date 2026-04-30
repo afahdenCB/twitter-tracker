@@ -2,3 +2,6 @@
 __pycache__/
 data/
 *.pyc
+cookies.json
+twitter_cookies.json
+accounts.db
