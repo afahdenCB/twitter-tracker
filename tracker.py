@@ -1,4 +1,6 @@
+import asyncio
 import logging
+import random
 from twitter_client import get_user_id, get_following
 from storage import load_following, save_following
 from telegram_notifier import send_message
@@ -7,15 +9,13 @@ from config import TRACKED_ACCOUNTS
 logger = logging.getLogger(__name__)
 
 
-def check_account(username: str) -> None:
+async def check_account(username: str) -> None:
     logger.info(f"Checking @{username}...")
-    user_id = get_user_id(username)
-
-    current_following = {u["id"]: u for u in get_following(user_id)}
+    user_id = await get_user_id(username)
+    current_following = {u["id"]: u for u in await get_following(user_id)}
     stored_following = load_following(username)
 
     if not stored_following:
-        # First run — save baseline without alerting
         logger.info(f"First run for @{username}: stored {len(current_following)} accounts as baseline")
         save_following(username, current_following)
         return
@@ -31,9 +31,10 @@ def check_account(username: str) -> None:
         save_following(username, current_following)
 
 
-def check_all() -> None:
+async def check_all() -> None:
     for username in TRACKED_ACCOUNTS:
         try:
-            check_account(username)
+            await check_account(username)
         except Exception:
             logger.exception(f"Error checking @{username}")
+        await asyncio.sleep(random.uniform(10, 20))

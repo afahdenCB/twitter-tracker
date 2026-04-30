@@ -1,6 +1,5 @@
+import asyncio
 import logging
-import schedule
-import time
 from tracker import check_all
 from config import POLL_INTERVAL_MINUTES
 
@@ -11,14 +10,12 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
-def main() -> None:
+async def main() -> None:
     logger.info(f"Starting Twitter follow tracker (polling every {POLL_INTERVAL_MINUTES}m)")
-    check_all()
-    schedule.every(POLL_INTERVAL_MINUTES).minutes.do(check_all)
     while True:
-        schedule.run_pending()
-        time.sleep(30)
+        await check_all()
+        await asyncio.sleep(POLL_INTERVAL_MINUTES * 60)
 
 
 if __name__ == "__main__":
-    main()
+    asyncio.run(main())

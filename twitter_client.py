@@ -1,26 +1,40 @@
-import tweepy
-from config import TWITTER_BEARER_TOKEN
+import logging
+from contextlib import aclosing
+from twscrape import API
+from config import TWITTER_USERNAME, TWITTER_EMAIL, TWITTER_PASSWORD
 
-_client = tweepy.Client(bearer_token=TWITTER_BEARER_TOKEN, wait_on_rate_limit=True)
+logger = logging.getLogger(__name__)
+
+_api = API()
+_initialized = False
 
 
-def get_user_id(username: str) -> str:
-    response = _client.get_user(username=username)
-    return str(response.data.id)
+async def _ensure_initialized() -> None:
+    global _initialized
+    if _initialized:
+        return
+    await _api.pool.add_account(
+        username=TWITTER_USERNAME,
+        password=TWITTER_PASSWORD,
+        email=TWITTER_EMAIL,
+        email_password="",
+    )
+    await _api.pool.login_all()
+    logger.info("twscrape account logged in")
+    _initialized = True
 
 
-def get_following(user_id: str) -> list[dict]:
+async def get_user_id(username: str) -> str:
+    await _ensure_initialized()
+    user = await _api.user_by_login(username)
+    return str(user.id)
+
+
+async def get_following(user_id: str) -> list[dict]:
     """Returns all accounts followed by user_id as {id, username, name} dicts."""
+    await _ensure_initialized()
     following = []
-    for page in tweepy.Paginator(
-        _client.get_users_following,
-        user_id,
-        user_fields=["username", "name"],
-        max_results=1000,
-    ):
-        if page.data:
-            for user in page.data:
-                following.append(
-                    {"id": str(user.id), "username": user.username, "name": user.name}
-                )
+    async with aclosing(_api.following(int(user_id))) as gen:
+        async for user in gen:
+            following.append({"id": str(user.id), "username": user.username, "name": user.displayname})
     return following
