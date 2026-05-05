@@ -57,7 +57,7 @@ export default function ConvergencePage() {
   return (
     <div>
       <div className="flex items-center justify-between mb-6">
-        <h1 className="text-2xl font-semibold text-gray-900">Convergence</h1>
+        <h1 className="text-2xl font-semibold text-foreground">Convergence</h1>
         <div className="flex gap-3">
           <Select value={days} onValueChange={setDays}>
             <SelectTrigger className="w-36">
@@ -85,9 +85,9 @@ export default function ConvergencePage() {
       </div>
 
       {entries.length === 0 ? (
-        <p className="text-gray-500 text-sm">No results for this filter.</p>
+        <p className="text-muted-foreground text-sm">No results for this filter.</p>
       ) : (
-        <div className="bg-white rounded-lg border">
+        <div className="bg-card rounded-lg border">
           <Table>
             <TableHeader>
               <TableRow>
@@ -110,11 +110,11 @@ export default function ConvergencePage() {
                       >
                         @{e.username}
                       </a>
-                      <p className="text-xs text-gray-500">{e.name}</p>
+                      <p className="text-xs text-muted-foreground">{e.name}</p>
                     </div>
                   </TableCell>
                   <TableCell className="text-center">
-                    <span className="font-semibold text-gray-900">{e.count}</span>
+                    <span className="font-semibold text-foreground">{e.count}</span>
                   </TableCell>
                   <TableCell>
                     <div className="flex flex-wrap gap-1">
@@ -125,7 +125,7 @@ export default function ConvergencePage() {
                       ))}
                     </div>
                   </TableCell>
-                  <TableCell className="text-sm text-gray-500">
+                  <TableCell className="text-sm text-muted-foreground">
                     {timeAgo(e.latest_follow)}
                   </TableCell>
                 </TableRow>
