@@ -2,7 +2,7 @@ import logging
 from contextlib import aclosing
 from twscrape import API
 import twscrape.xclid as _xclid
-from config import TWITTER_USERNAME, TWITTER_EMAIL, TWITTER_PASSWORD, TWITTER_COOKIES
+from config import TWITTER_ACCOUNTS
 
 # twscrape 0.17.0 scrapes x.com to compute x-client-transaction-id but the page
 # structure changed and parsing breaks. Twitter accepts any value for this header,
@@ -22,18 +22,24 @@ async def _ensure_initialized() -> None:
     global _initialized
     if _initialized:
         return
-    await _api.pool.add_account(
-        username=TWITTER_USERNAME,
-        password=TWITTER_PASSWORD,
-        email=TWITTER_EMAIL,
-        email_password="",
-        cookies=TWITTER_COOKIES or None,
-    )
-    if not TWITTER_COOKIES:
+
+    needs_login = False
+    for acct in TWITTER_ACCOUNTS:
+        await _api.pool.add_account(
+            username=acct["username"],
+            password=acct["password"],
+            email=acct["email"],
+            email_password="",
+            cookies=acct.get("cookies") or None,
+        )
+        if not acct.get("cookies"):
+            needs_login = True
+
+    if needs_login:
         await _api.pool.login_all()
-        logger.info("twscrape account logged in via password")
-    else:
-        logger.info("twscrape account initialized via cookies")
+        logger.info("twscrape: password-based accounts logged in")
+
+    logger.info(f"twscrape pool initialized with {len(TWITTER_ACCOUNTS)} account(s)")
     _initialized = True
 
 

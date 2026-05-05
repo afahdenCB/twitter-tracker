@@ -90,10 +90,19 @@ async def check_account(username: str) -> None:
 
 async def check_all() -> None:
     from dotenv import dotenv_values
+    from config import TWITTER_ACCOUNTS
     accounts = [u.strip() for u in dotenv_values(".env").get("TRACKED_ACCOUNTS", "").split(",") if u.strip()]
-    for username in accounts:
-        try:
-            await check_account(username)
-        except Exception:
-            logger.exception(f"Error checking @{username}")
-        await asyncio.sleep(random.uniform(10, 20))
+
+    # Run up to one check per scraper account concurrently.
+    # Small jitter inside the semaphore spaces out requests on each slot.
+    sem = asyncio.Semaphore(len(TWITTER_ACCOUNTS))
+
+    async def _check(username: str) -> None:
+        async with sem:
+            try:
+                await check_account(username)
+            except Exception:
+                logger.exception(f"Error checking @{username}")
+            await asyncio.sleep(random.uniform(3, 8))
+
+    await asyncio.gather(*[_check(u) for u in accounts])
