@@ -1,38 +1,97 @@
 import asyncio
 import logging
 import random
-from twitter_client import get_user_id, get_following
-from storage import load_following, save_following
+from datetime import datetime, timezone
+from twitter_client import get_user_info, get_following
+from storage import load_following, save_following, load_meta, save_meta, append_feed
 from telegram_notifier import send_message
-from config import TRACKED_ACCOUNTS
+from signals import process_new_follow
 
 logger = logging.getLogger(__name__)
 
 
+def _fmt_followers(count: int) -> str:
+    if count >= 1_000_000:
+        return f"{count / 1_000_000:.1f}M"
+    if count >= 1_000:
+        return f"{count / 1_000:.1f}K"
+    return str(count)
+
+
+def _fmt_age(created_at_str: str) -> str:
+    created = datetime.fromisoformat(created_at_str)
+    days = (datetime.now(timezone.utc) - created).days
+    years, remainder = divmod(days, 365)
+    months = remainder // 30
+    if years and months:
+        return f"{years}y {months}mo"
+    if years:
+        return f"{years}y"
+    if months:
+        return f"{months}mo"
+    return f"{days}d"
+
+
 async def check_account(username: str) -> None:
     logger.info(f"Checking @{username}...")
-    user_id = await get_user_id(username)
-    current_following = {u["id"]: u for u in await get_following(user_id)}
+    user_info = await get_user_info(username)
+    user_id = user_info["id"]
+    current_count = user_info["following_count"]
+
+    meta = load_meta(username)
+    stored_count = meta.get("following_count")
     stored_following = load_following(username)
 
+    # First run: establish baseline without alerting
     if not stored_following:
+        current_following = {u["id"]: u for u in await get_following(user_id)}
         logger.info(f"First run for @{username}: stored {len(current_following)} accounts as baseline")
         save_following(username, current_following)
+        save_meta(username, {"user_id": user_id, "following_count": current_count})
         return
 
+    # Skip full fetch if following count hasn't changed
+    if current_count == stored_count:
+        logger.info(f"@{username}: following count unchanged ({current_count}), skipping full fetch")
+        return
+
+    logger.info(f"@{username}: following count changed ({stored_count} → {current_count}), fetching full list")
+    current_following = {u["id"]: u for u in await get_following(user_id)}
     new_follows = [u for uid, u in current_following.items() if uid not in stored_following]
 
     for user in new_follows:
-        msg = f"🔔 <b>@{username}</b> just followed <b>@{user['username']}</b> ({user['name']})"
+        profile_url = f"https://x.com/{user['username']}"
+        followers_str = _fmt_followers(user["followers_count"]) if user.get("followers_count") is not None else "?"
+        age_str = _fmt_age(user["created_at"]) if user.get("created_at") else "?"
+        bio = user.get("bio", "").strip()
+        bio_line = f"\n💬 {bio}" if bio else ""
+        msg = (
+            f"🔔 <b>@{username}</b> followed"
+            f" <a href=\"{profile_url}\"><b>@{user['username']}</b></a> ({user['name']})\n"
+            f"👥 {followers_str} followers · 📅 {age_str} old"
+            f"{bio_line}"
+        )
         logger.info(msg)
         send_message(msg)
+        append_feed({
+            "tracker": username,
+            "followed_id": user["id"],
+            "followed_username": user["username"],
+            "followed_name": user["name"],
+            "followers_count": user.get("followers_count"),
+            "bio": user.get("bio", ""),
+            "detected_at": datetime.now(timezone.utc).isoformat(),
+        })
+        process_new_follow(user, username)
 
-    if new_follows:
-        save_following(username, current_following)
+    save_following(username, current_following)
+    save_meta(username, {"user_id": user_id, "following_count": current_count})
 
 
 async def check_all() -> None:
-    for username in TRACKED_ACCOUNTS:
+    from dotenv import dotenv_values
+    accounts = [u.strip() for u in dotenv_values(".env").get("TRACKED_ACCOUNTS", "").split(",") if u.strip()]
+    for username in accounts:
         try:
             await check_account(username)
         except Exception:
