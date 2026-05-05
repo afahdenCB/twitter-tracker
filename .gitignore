@@ -5,3 +5,5 @@ data/
 cookies.json
 twitter_cookies.json
 accounts.db
+web/.next/
+web/node_modules/
