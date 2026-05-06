@@ -12,19 +12,19 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}>
-      <body className="min-h-full bg-gray-50">
-        <nav className="border-b bg-white">
+    <html lang="en" className={`${geistSans.variable} ${geistMono.variable} h-full antialiased dark`}>
+      <body className="min-h-full">
+        <nav className="border-b bg-card">
           <div className="max-w-6xl mx-auto px-6 flex items-center gap-8 h-14">
-            <span className="font-semibold text-gray-900">Follow Tracker</span>
-            <Link href="/" className="text-sm text-gray-500 hover:text-gray-900 transition-colors">
-              Dashboard
+            <span className="font-semibold text-foreground">Follow Tracker</span>
+            <Link href="/" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
+              Feed
             </Link>
-            <Link href="/convergence" className="text-sm text-gray-500 hover:text-gray-900 transition-colors">
+            <Link href="/convergence" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
               Convergence
             </Link>
-            <Link href="/feed" className="text-sm text-gray-500 hover:text-gray-900 transition-colors">
-              Feed
+            <Link href="/accounts" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
+              Accounts
             </Link>
           </div>
         </nav>
