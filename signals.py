@@ -92,6 +92,8 @@ def process_new_follow(user: dict, tracker_username: str) -> None:
 
     index[user_id]["username"] = user["username"]
     index[user_id]["name"] = user["name"]
+    index[user_id]["bio"] = user.get("bio", "")
+    index[user_id]["followers_count"] = user.get("followers_count")
     index[user_id]["followed_by"][tracker_username] = datetime.now(timezone.utc).isoformat()
     save_convergence(index)
 

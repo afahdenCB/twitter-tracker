@@ -42,17 +42,20 @@ async def check_account(username: str) -> None:
     stored_count = meta.get("following_count")
     stored_following = load_following(username)
 
+    now_iso = datetime.now(timezone.utc).isoformat()
+
     # First run: establish baseline without alerting
     if not stored_following:
         current_following = {u["id"]: u for u in await get_following(user_id)}
         logger.info(f"First run for @{username}: stored {len(current_following)} accounts as baseline")
         save_following(username, current_following)
-        save_meta(username, {"user_id": user_id, "following_count": current_count})
+        save_meta(username, {"user_id": user_id, "following_count": current_count, "checked_at": now_iso})
         return
 
     # Skip full fetch if following count hasn't changed
     if current_count == stored_count:
         logger.info(f"@{username}: following count unchanged ({current_count}), skipping full fetch")
+        save_meta(username, {**meta, "checked_at": now_iso})
         return
 
     logger.info(f"@{username}: following count changed ({stored_count} → {current_count}), fetching full list")
@@ -85,12 +88,18 @@ async def check_account(username: str) -> None:
         process_new_follow(user, username)
 
     save_following(username, current_following)
-    save_meta(username, {"user_id": user_id, "following_count": current_count})
+    save_meta(username, {"user_id": user_id, "following_count": current_count, "checked_at": now_iso})
 
 
 async def check_all() -> None:
     from dotenv import dotenv_values
     from config import TWITTER_ACCOUNTS
+    from storage import append_feed  # already imported but needed for clarity
+    from datetime import datetime, timezone as _tz
+    import json as _json
+    from pathlib import Path as _Path
+    _Path("data").mkdir(exist_ok=True)
+    _Path("data/status.json").write_text(_json.dumps({"last_cycle_started_at": datetime.now(_tz.utc).isoformat()}))
     accounts = [u.strip() for u in dotenv_values(".env").get("TRACKED_ACCOUNTS", "").split(",") if u.strip()]
 
     # Run up to one check per scraper account concurrently.
