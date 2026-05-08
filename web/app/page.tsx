@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import Avatar from "@/components/Avatar";
+import API_BASE from "@/lib/api";
 
 const PAGE_SIZE = 20;
 
@@ -146,7 +147,7 @@ export default function FeedPage() {
   const [selected, setSelected] = useState<Set<string>>(new Set());
 
   useEffect(() => {
-    fetch("http://localhost:8000/api/accounts")
+    fetch("${API_BASE}/api/accounts")
       .then((r) => r.json())
       .then((accounts: { username: string }[]) => {
         const names = accounts.map((a) => a.username);
@@ -168,7 +169,7 @@ export default function FeedPage() {
     if (!allSelected) {
       selected.forEach((t) => params.append("tracker", t));
     }
-    fetch(`http://localhost:8000/api/feed?${params}`)
+    fetch(`${API_BASE}/api/feed?${params}`)
       .then((r) => r.json())
       .then((data) => {
         setEntries(data.items);

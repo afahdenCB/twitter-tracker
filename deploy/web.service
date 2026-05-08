@@ -1,0 +1,14 @@
+[Unit]
+Description=Twitter Tracker Next.js Web
+After=network.target
+
+[Service]
+Type=simple
+User=YOUR_USER
+WorkingDirectory=/home/YOUR_USER/twitter-tracker/web
+ExecStart=/usr/bin/npm run start -- --port 3000
+Restart=on-failure
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target

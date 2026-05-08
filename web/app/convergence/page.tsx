@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Avatar from "@/components/Avatar";
+import API_BASE from "@/lib/api";
 import {
   Select,
   SelectContent,
@@ -86,7 +87,7 @@ export default function ConvergencePage() {
   useEffect(() => {
     const params = new URLSearchParams({ min_count: minCount });
     if (days !== "all") params.set("days", days);
-    fetch(`http://localhost:8000/api/convergence?${params}`)
+    fetch(`${API_BASE}/api/convergence?${params}`)
       .then((r) => r.json())
       .then(setEntries);
   }, [minCount, days]);
