@@ -5,6 +5,7 @@ import { Dialog } from "@base-ui/react/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import Avatar from "@/components/Avatar";
+import API_BASE from "@/lib/api";
 
 interface Account {
   username: string;
@@ -41,13 +42,13 @@ export default function AccountsPage() {
   const [confirmUsername, setConfirmUsername] = useState<string | null>(null);
 
   function fetchAccounts() {
-    fetch("http://localhost:8000/api/accounts")
+    fetch("${API_BASE}/api/accounts")
       .then((r) => r.json())
       .then(setAccounts);
   }
 
   function fetchStatus() {
-    fetch("http://localhost:8000/api/status")
+    fetch("${API_BASE}/api/status")
       .then((r) => r.json())
       .then(setStatus);
   }
@@ -64,7 +65,7 @@ export default function AccountsPage() {
     setError(null);
     setAddedUser(null);
     try {
-      const r = await fetch("http://localhost:8000/api/accounts", {
+      const r = await fetch("${API_BASE}/api/accounts", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ username }),
@@ -85,7 +86,7 @@ export default function AccountsPage() {
     const username = confirmUsername;
     setConfirmUsername(null);
     setRemoving(username);
-    await fetch(`http://localhost:8000/api/accounts/${username}`, { method: "DELETE" });
+    await fetch(`${API_BASE}/api/accounts/${username}`, { method: "DELETE" });
     if (addedUser === username) setAddedUser(null);
     fetchAccounts();
     setRemoving(null);
