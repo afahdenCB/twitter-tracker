@@ -42,13 +42,13 @@ export default function AccountsPage() {
   const [confirmUsername, setConfirmUsername] = useState<string | null>(null);
 
   function fetchAccounts() {
-    fetch("${API_BASE}/api/accounts")
+    fetch(`${API_BASE}/api/accounts`)
       .then((r) => r.json())
       .then(setAccounts);
   }
 
   function fetchStatus() {
-    fetch("${API_BASE}/api/status")
+    fetch(`${API_BASE}/api/status`)
       .then((r) => r.json())
       .then(setStatus);
   }
@@ -65,7 +65,7 @@ export default function AccountsPage() {
     setError(null);
     setAddedUser(null);
     try {
-      const r = await fetch("${API_BASE}/api/accounts", {
+      const r = await fetch(`${API_BASE}/api/accounts`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ username }),

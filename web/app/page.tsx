@@ -147,7 +147,7 @@ export default function FeedPage() {
   const [selected, setSelected] = useState<Set<string>>(new Set());
 
   useEffect(() => {
-    fetch("${API_BASE}/api/accounts")
+    fetch(`${API_BASE}/api/accounts`)
       .then((r) => r.json())
       .then((accounts: { username: string }[]) => {
         const names = accounts.map((a) => a.username);
