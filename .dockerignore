@@ -1,0 +1,10 @@
+.env
+.env.*
+data/
+accounts.db
+__pycache__/
+*.pyc
+web/
+deploy/
+.git/
+.claude/
