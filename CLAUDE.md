@@ -14,7 +14,7 @@ Three components, each deployed separately:
 |---|---|---|
 | Tracker (`main.py`) | GCP VM | `twitter-tracker-vm`, us-central1-a, personal GCP project `twitter-tracker-2025` |
 | API (`api.py`) | Cloud Run | `https://twitter-tracker-api-576248526926.us-central1.run.app` |
-| Frontend (`web/`) | Vercel | Connected to `gcp-vercel-deploy` branch |
+| Frontend (`web/`) | Vercel | `https://twitter-tracker-chi.vercel.app` — connected to `master` |
 
 **State** is stored in GCS bucket `twitter-tracker-data-personal` (us-central1). All `storage.py` reads/writes go there — no local files in production.
 
@@ -82,7 +82,7 @@ gcloud storage cat gs://twitter-tracker-data-personal/accounts.json --project=tw
 |---|---|
 | `GCS_BUCKET` | `twitter-tracker-data-personal` |
 | `POLL_INTERVAL_MINUTES` | `60` |
-| `CORS_ORIGINS` | Vercel URL (update once known) |
+| `CORS_ORIGINS` | `https://twitter-tracker-chi.vercel.app` |
 
 ### Vercel frontend
 
