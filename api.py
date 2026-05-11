@@ -1,13 +1,11 @@
 import os
-import re
 from datetime import datetime, timedelta, timezone
-from pathlib import Path
-import json
 
-from dotenv import dotenv_values
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
+
+import storage
 
 app = FastAPI()
 _cors_origins = [o.strip() for o in os.getenv("CORS_ORIGINS", "http://localhost:3000").split(",")]
@@ -18,48 +16,23 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-DATA_DIR = Path("data")
-ENV_PATH = Path(".env")
-
-
-def _read_tracked_accounts() -> list[str]:
-    return [
-        u.strip()
-        for u in dotenv_values(".env").get("TRACKED_ACCOUNTS", "").split(",")
-        if u.strip()
-    ]
-
-
-def _write_tracked_accounts(accounts: list[str]) -> None:
-    content = ENV_PATH.read_text()
-    new_line = f"TRACKED_ACCOUNTS={','.join(accounts)}"
-    content = re.sub(r"^TRACKED_ACCOUNTS=.*$", new_line, content, flags=re.MULTILINE)
-    ENV_PATH.write_text(content)
-
 
 @app.get("/api/accounts")
 def get_accounts():
-    # Build last_new_follow index from feed in one pass
     last_follow: dict[str, str] = {}
-    feed_path = DATA_DIR / "feed.jsonl"
-    if feed_path.exists():
-        for line in feed_path.read_text().splitlines():
-            if not line.strip():
-                continue
-            entry = json.loads(line)
-            tracker = entry.get("tracker", "")
-            ts = entry.get("detected_at", "")
-            if tracker and ts and ts > last_follow.get(tracker, ""):
-                last_follow[tracker] = ts
+    for entry in storage.load_feed():
+        tracker = entry.get("tracker", "")
+        ts = entry.get("detected_at", "")
+        if tracker and ts and ts > last_follow.get(tracker, ""):
+            last_follow[tracker] = ts
 
     result = []
-    for username in _read_tracked_accounts():
-        meta_path = DATA_DIR / f"{username}.meta.json"
-        meta = json.loads(meta_path.read_text()) if meta_path.exists() else {}
+    for username in storage.load_tracked_accounts():
+        meta = storage.load_meta(username)
         result.append({
             "username": username,
             "following_count": meta.get("following_count"),
-            "baselined": meta_path.exists(),
+            "baselined": bool(meta),
             "last_checked": meta.get("checked_at"),
             "last_new_follow": last_follow.get(username),
         })
@@ -75,29 +48,28 @@ def add_account(body: AddAccountBody):
     username = body.username.strip().lstrip("@")
     if not username:
         raise HTTPException(status_code=400, detail="username required")
-    accounts = _read_tracked_accounts()
+    accounts = storage.load_tracked_accounts()
     if username in accounts:
         raise HTTPException(status_code=409, detail="already tracked")
     accounts.append(username)
-    _write_tracked_accounts(accounts)
+    storage.save_tracked_accounts(accounts)
     return {"username": username}
 
 
 @app.delete("/api/accounts/{username}")
 def remove_account(username: str):
-    accounts = _read_tracked_accounts()
+    accounts = storage.load_tracked_accounts()
     if username not in accounts:
         raise HTTPException(status_code=404, detail="not found")
     accounts.remove(username)
-    _write_tracked_accounts(accounts)
+    storage.save_tracked_accounts(accounts)
     return {"username": username}
 
 
 @app.get("/api/status")
 def get_status():
-    status_path = DATA_DIR / "status.json"
-    status = json.loads(status_path.read_text()) if status_path.exists() else {}
-    poll_interval = int(dotenv_values(".env").get("POLL_INTERVAL_MINUTES", "60"))
+    status = storage.load_status()
+    poll_interval = int(os.getenv("POLL_INTERVAL_MINUTES", "60"))
 
     eta_minutes = None
     if status.get("last_cycle_started_at"):
@@ -117,11 +89,7 @@ def get_convergence(
     min_count: int = Query(2, ge=1),
     days: int = Query(None, ge=1),
 ):
-    path = DATA_DIR / "convergence.json"
-    if not path.exists():
-        return []
-
-    index = json.loads(path.read_text())
+    index = storage.load_convergence()
     cutoff = (
         (datetime.now(timezone.utc) - timedelta(days=days)).isoformat()
         if days
@@ -163,16 +131,9 @@ def get_feed(
     offset: int = Query(0, ge=0),
     tracker: list[str] = Query(None),
 ):
-    path = DATA_DIR / "feed.jsonl"
-    if not path.exists():
-        return {"items": [], "total": 0}
-    entries = [
-        json.loads(line)
-        for line in path.read_text().splitlines()
-        if line.strip()
-    ]
+    entries = storage.load_feed()
     if tracker:
         tracker_set = set(tracker)
         entries = [e for e in entries if e.get("tracker") in tracker_set]
     entries.reverse()
-    return {"items": entries[offset : offset + limit], "total": len(entries)}
+    return {"items": entries[offset: offset + limit], "total": len(entries)}

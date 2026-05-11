@@ -92,15 +92,12 @@ async def check_account(username: str) -> None:
 
 
 async def check_all() -> None:
-    from dotenv import dotenv_values
-    from config import TWITTER_ACCOUNTS
-    from storage import append_feed  # already imported but needed for clarity
     from datetime import datetime, timezone as _tz
-    import json as _json
-    from pathlib import Path as _Path
-    _Path("data").mkdir(exist_ok=True)
-    _Path("data/status.json").write_text(_json.dumps({"last_cycle_started_at": datetime.now(_tz.utc).isoformat()}))
-    accounts = [u.strip() for u in dotenv_values(".env").get("TRACKED_ACCOUNTS", "").split(",") if u.strip()]
+    from config import TWITTER_ACCOUNTS
+    from storage import save_status, load_tracked_accounts
+
+    save_status({"last_cycle_started_at": datetime.now(_tz.utc).isoformat()})
+    accounts = load_tracked_accounts()
 
     # Run up to one check per scraper account concurrently.
     # Small jitter inside the semaphore spaces out requests on each slot.
