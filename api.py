@@ -45,7 +45,11 @@ class AddAccountBody(BaseModel):
 
 @app.post("/api/accounts")
 def add_account(body: AddAccountBody):
-    username = body.username.strip().lstrip("@")
+    raw = body.username.strip()
+    # Accept full URLs like https://x.com/username or https://twitter.com/username
+    if "/" in raw:
+        raw = raw.rstrip("/").split("/")[-1]
+    username = raw.lstrip("@")
     if not username:
         raise HTTPException(status_code=400, detail="username required")
     accounts = storage.load_tracked_accounts()
