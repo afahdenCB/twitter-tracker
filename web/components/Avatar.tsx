@@ -32,7 +32,7 @@ export default function Avatar({ username, size = 32 }: AvatarProps) {
   return (
     // eslint-disable-next-line @next/next/no-img-element
     <img
-      src={`https://unavatar.io/twitter/${username}`}
+      src={`https://unavatar.io/x/${username}`}
       alt={username}
       width={size}
       height={size}
