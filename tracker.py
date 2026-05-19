@@ -62,6 +62,17 @@ async def check_account(username: str) -> None:
     current_following = {u["id"]: u for u in await get_following(user_id)}
     new_follows = [u for uid, u in current_following.items() if uid not in stored_following]
 
+    # If an implausibly large number of "new" follows appear in one cycle, the
+    # baseline is stale or corrupt. Re-baseline silently rather than spamming.
+    if len(new_follows) > 25:
+        logger.warning(
+            f"@{username}: {len(new_follows)} new follows detected in one cycle — "
+            f"baseline looks stale, re-baselining silently"
+        )
+        save_following(username, current_following)
+        save_meta(username, {"user_id": user_id, "following_count": current_count, "checked_at": now_iso})
+        return
+
     for user in new_follows:
         profile_url = f"https://x.com/{user['username']}"
         followers_str = _fmt_followers(user["followers_count"]) if user.get("followers_count") is not None else "?"
