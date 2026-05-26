@@ -113,6 +113,7 @@ async def check_account(username: str) -> None:
             "followed_username": user["username"],
             "followed_name": user["name"],
             "followers_count": user.get("followers_count"),
+            "account_created_at": user.get("created_at"),
             "bio": user.get("bio", ""),
             "detected_at": datetime.now(timezone.utc).isoformat(),
         })
