@@ -32,6 +32,22 @@ def _fmt_age(created_at_str: str) -> str:
     return f"{days}d"
 
 
+def _is_partial_fetch(fetched: dict, expected_count: int, username: str) -> bool:
+    """Return True if get_following returned far fewer accounts than Twitter reports.
+
+    Twitter's following count is approximate, so we allow 20% slack. Below that
+    threshold the fetch almost certainly hit a rate limit mid-pagination and we
+    should skip saving to avoid writing a corrupt baseline.
+    """
+    if expected_count > 0 and len(fetched) < expected_count * 0.8:
+        logger.warning(
+            f"@{username}: partial fetch detected — got {len(fetched)} accounts "
+            f"but API reports {expected_count} (skipping to avoid bad baseline)"
+        )
+        return True
+    return False
+
+
 async def check_account(username: str) -> None:
     logger.info(f"Checking @{username}...")
     user_info = await get_user_info(username)
@@ -47,6 +63,8 @@ async def check_account(username: str) -> None:
     # First run: establish baseline without alerting
     if not stored_following:
         current_following = {u["id"]: u for u in await get_following(user_id)}
+        if _is_partial_fetch(current_following, current_count, username):
+            return
         logger.info(f"First run for @{username}: stored {len(current_following)} accounts as baseline")
         save_following(username, current_following)
         save_meta(username, {"user_id": user_id, "following_count": current_count, "checked_at": now_iso})
@@ -60,6 +78,8 @@ async def check_account(username: str) -> None:
 
     logger.info(f"@{username}: following count changed ({stored_count} → {current_count}), fetching full list")
     current_following = {u["id"]: u for u in await get_following(user_id)}
+    if _is_partial_fetch(current_following, current_count, username):
+        return
     new_follows = [u for uid, u in current_following.items() if uid not in stored_following]
 
     # If an implausibly large number of "new" follows appear in one cycle, the
