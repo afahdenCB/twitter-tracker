@@ -134,10 +134,17 @@ def get_feed(
     limit: int = Query(20, ge=1, le=200),
     offset: int = Query(0, ge=0),
     tracker: list[str] = Query(None),
+    max_account_age_days: int = Query(None, ge=1),
 ):
     entries = storage.load_feed()
     if tracker:
         tracker_set = set(tracker)
         entries = [e for e in entries if e.get("tracker") in tracker_set]
+    if max_account_age_days is not None:
+        cutoff = (datetime.now(timezone.utc) - timedelta(days=max_account_age_days)).isoformat()
+        entries = [
+            e for e in entries
+            if e.get("account_created_at") and e["account_created_at"] >= cutoff
+        ]
     entries.reverse()
     return {"items": entries[offset: offset + limit], "total": len(entries)}

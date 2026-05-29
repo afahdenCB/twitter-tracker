@@ -14,9 +14,19 @@ interface FeedEntry {
   followed_username: string;
   followed_name: string;
   followers_count: number | null;
+  account_created_at: string | null;
   bio: string;
   detected_at: string;
 }
+
+const AGE_OPTIONS: { label: string; days: number | null }[] = [
+  { label: "Any age", days: null },
+  { label: "< 1 week", days: 7 },
+  { label: "< 1 month", days: 30 },
+  { label: "< 3 months", days: 90 },
+  { label: "< 6 months", days: 180 },
+  { label: "< 1 year", days: 365 },
+];
 
 function fmtFollowers(n: number | null) {
   if (n === null) return "?";
@@ -145,6 +155,7 @@ export default function FeedPage() {
   const [page, setPage] = useState(0);
   const [trackers, setTrackers] = useState<string[]>([]);
   const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [maxAgeDays, setMaxAgeDays] = useState<number | null>(null);
 
   useEffect(() => {
     fetch(`${API_BASE}/api/accounts`)
@@ -158,7 +169,7 @@ export default function FeedPage() {
 
   useEffect(() => {
     setPage(0);
-  }, [selected]);
+  }, [selected, maxAgeDays]);
 
   useEffect(() => {
     const allSelected = selected.size === trackers.length || selected.size === 0;
@@ -169,13 +180,16 @@ export default function FeedPage() {
     if (!allSelected) {
       selected.forEach((t) => params.append("tracker", t));
     }
+    if (maxAgeDays !== null) {
+      params.set("max_account_age_days", String(maxAgeDays));
+    }
     fetch(`${API_BASE}/api/feed?${params}`)
       .then((r) => r.json())
       .then((data) => {
         setEntries(data.items);
         setTotal(data.total);
       });
-  }, [selected, page, trackers.length]);
+  }, [selected, maxAgeDays, page, trackers.length]);
 
   const totalPages = Math.ceil(total / PAGE_SIZE);
 
@@ -192,15 +206,28 @@ export default function FeedPage() {
       {/* Feed header */}
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-2xl font-semibold text-foreground">Feed</h1>
-        {trackers.length > 0 && (
-          <FilterDropdown
-            trackers={trackers}
-            selected={selected}
-            onToggle={toggleTracker}
-            onSelectAll={() => setSelected(new Set(trackers))}
-            onSelectNone={() => setSelected(new Set())}
-          />
-        )}
+        <div className="flex items-center gap-2">
+          <select
+            value={maxAgeDays ?? ""}
+            onChange={(e) => setMaxAgeDays(e.target.value === "" ? null : Number(e.target.value))}
+            className="text-sm border rounded-md px-3 py-1.5 bg-card hover:bg-muted/50 transition-colors text-foreground"
+          >
+            {AGE_OPTIONS.map((opt) => (
+              <option key={opt.label} value={opt.days ?? ""}>
+                {opt.label}
+              </option>
+            ))}
+          </select>
+          {trackers.length > 0 && (
+            <FilterDropdown
+              trackers={trackers}
+              selected={selected}
+              onToggle={toggleTracker}
+              onSelectAll={() => setSelected(new Set(trackers))}
+              onSelectNone={() => setSelected(new Set())}
+            />
+          )}
+        </div>
       </div>
 
       {selected.size === 0 ? (
