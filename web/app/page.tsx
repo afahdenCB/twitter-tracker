@@ -33,6 +33,17 @@ const AGE_OPTIONS: { label: string; days: number | null }[] = [
   { label: "< 1 year", days: 365 },
 ];
 
+function fmtAge(iso: string | null): string | null {
+  if (!iso) return null;
+  const days = Math.floor((Date.now() - new Date(iso).getTime()) / 86400000);
+  const years = Math.floor(days / 365);
+  const months = Math.floor((days % 365) / 30);
+  if (years && months) return `${years}y ${months}mo old`;
+  if (years) return `${years}y old`;
+  if (months) return `${months}mo old`;
+  return `${days}d old`;
+}
+
 function fmtFollowers(n: number | null) {
   if (n === null) return "?";
   if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
@@ -267,6 +278,14 @@ export default function FeedPage() {
                             >
                               {fmtFollowers(e.followers_count)} followers
                             </span>
+                            {fmtAge(e.account_created_at) && (
+                              <span
+                                className="text-xs shrink-0 px-1.5 py-0.5 rounded text-muted-foreground"
+                                style={{ background: "rgba(255,255,255,0.07)" }}
+                              >
+                                {fmtAge(e.account_created_at)}
+                              </span>
+                            )}
                             {e.bio && (
                               <span className="text-xs text-muted-foreground truncate">{e.bio}</span>
                             )}
