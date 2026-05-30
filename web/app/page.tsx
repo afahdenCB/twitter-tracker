@@ -84,6 +84,8 @@ export default function FeedPage() {
   const [selectedTags, setSelectedTags] = useState<Set<string>>(new Set());
   const [selectedAccounts, setSelectedAccounts] = useState<Set<string>>(new Set());
   const [maxAgeDays, setMaxAgeDays] = useState<number | null>(null);
+  const [bioKeyword, setBioKeyword] = useState("");
+  const [debouncedBioKeyword, setDebouncedBioKeyword] = useState("");
 
   useEffect(() => {
     fetch(`${API_BASE}/api/accounts`)
@@ -97,8 +99,13 @@ export default function FeedPage() {
   }, []);
 
   useEffect(() => {
+    const timer = setTimeout(() => setDebouncedBioKeyword(bioKeyword), 300);
+    return () => clearTimeout(timer);
+  }, [bioKeyword]);
+
+  useEffect(() => {
     setPage(0);
-  }, [selectedTags, selectedAccounts, maxAgeDays]);
+  }, [selectedTags, selectedAccounts, maxAgeDays, debouncedBioKeyword]);
 
   useEffect(() => {
     // Compute effective trackers: accounts matching any selected tag UNION individually selected accounts
@@ -127,13 +134,17 @@ export default function FeedPage() {
       params.set("max_account_age_days", String(maxAgeDays));
     }
 
+    if (debouncedBioKeyword.trim()) {
+      params.set("bio_contains", debouncedBioKeyword.trim());
+    }
+
     fetch(`${API_BASE}/api/feed?${params}`)
       .then((r) => r.json())
       .then((data) => {
         setEntries(data.items);
         setTotal(data.total);
       });
-  }, [selectedTags, selectedAccounts, maxAgeDays, page, trackers, tagsData]);
+  }, [selectedTags, selectedAccounts, maxAgeDays, debouncedBioKeyword, page, trackers, tagsData]);
 
   const totalPages = Math.ceil(total / PAGE_SIZE);
   const isFiltered = selectedTags.size > 0 || selectedAccounts.size > 0;
@@ -226,7 +237,16 @@ export default function FeedPage() {
 
       {/* Feed */}
       <div className="flex-1 min-w-0">
-        <h1 className="text-2xl font-semibold text-foreground mb-6">Feed</h1>
+        <div className="flex items-center justify-between mb-6">
+          <h1 className="text-2xl font-semibold text-foreground">Feed</h1>
+          <input
+            type="text"
+            placeholder="Filter by bio keyword..."
+            value={bioKeyword}
+            onChange={(e) => setBioKeyword(e.target.value)}
+            className="text-sm border rounded-md px-3 py-1.5 bg-card text-foreground placeholder:text-muted-foreground w-56"
+          />
+        </div>
 
         {total === 0 ? (
           <p className="text-muted-foreground text-sm">
