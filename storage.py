@@ -76,3 +76,11 @@ def load_tracked_accounts() -> list[str]:
 
 def save_tracked_accounts(accounts: list[str]) -> None:
     _write_json("accounts.json", accounts)
+
+
+def load_tags() -> dict:
+    return _read_json("tags.json", {"tags": [], "account_tags": {}})
+
+
+def save_tags(data: dict) -> None:
+    _write_json("tags.json", data, indent=2)

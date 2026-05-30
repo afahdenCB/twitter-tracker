@@ -129,6 +129,57 @@ def get_convergence(
     return results
 
 
+@app.get("/api/tags")
+def get_tags():
+    return storage.load_tags()
+
+
+class CreateTagBody(BaseModel):
+    name: str
+
+
+@app.post("/api/tags")
+def create_tag(body: CreateTagBody):
+    name = body.name.strip()
+    if not name:
+        raise HTTPException(status_code=400, detail="name required")
+    data = storage.load_tags()
+    if name in data["tags"]:
+        raise HTTPException(status_code=409, detail="tag already exists")
+    data["tags"].append(name)
+    storage.save_tags(data)
+    return data
+
+
+@app.delete("/api/tags/{name}")
+def delete_tag(name: str):
+    data = storage.load_tags()
+    if name not in data["tags"]:
+        raise HTTPException(status_code=404, detail="tag not found")
+    data["tags"].remove(name)
+    for username in data["account_tags"]:
+        data["account_tags"][username] = [
+            t for t in data["account_tags"][username] if t != name
+        ]
+    storage.save_tags(data)
+    return data
+
+
+class SetAccountTagsBody(BaseModel):
+    tags: list[str]
+
+
+@app.put("/api/accounts/{username}/tags")
+def set_account_tags(username: str, body: SetAccountTagsBody):
+    data = storage.load_tags()
+    invalid = [t for t in body.tags if t not in data["tags"]]
+    if invalid:
+        raise HTTPException(status_code=400, detail=f"unknown tags: {invalid}")
+    data["account_tags"][username] = body.tags
+    storage.save_tags(data)
+    return data
+
+
 @app.get("/api/feed")
 def get_feed(
     limit: int = Query(20, ge=1, le=200),
