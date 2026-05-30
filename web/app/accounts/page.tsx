@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Dialog } from "@base-ui/react/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -20,6 +20,11 @@ interface Status {
   poll_interval_minutes: number;
 }
 
+interface TagsData {
+  tags: string[];
+  account_tags: Record<string, string[]>;
+}
+
 function timeAgo(iso: string): string {
   const mins = Math.floor((Date.now() - new Date(iso).getTime()) / 60000);
   if (mins < 60) return `${mins}m ago`;
@@ -31,15 +36,106 @@ function timeAgo(iso: string): string {
   return `${Math.floor(days / 30)}mo ago`;
 }
 
+function TagChip({ label, onRemove }: { label: string; onRemove?: () => void }) {
+  return (
+    <span
+      className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full"
+      style={{
+        background: "rgba(59,130,246,0.12)",
+        border: "1px solid rgba(59,130,246,0.3)",
+        color: "rgb(147,197,253)",
+      }}
+    >
+      {label}
+      {onRemove && (
+        <button
+          onClick={onRemove}
+          className="opacity-60 hover:opacity-100 transition-opacity leading-none"
+          aria-label={`Remove tag ${label}`}
+        >
+          ×
+        </button>
+      )}
+    </span>
+  );
+}
+
+function TagPopover({
+  username,
+  allTags,
+  currentTags,
+  onUpdate,
+}: {
+  username: string;
+  allTags: string[];
+  currentTags: string[];
+  onUpdate: (tags: string[]) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    function onMouseDown(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    }
+    document.addEventListener("mousedown", onMouseDown);
+    return () => document.removeEventListener("mousedown", onMouseDown);
+  }, [open]);
+
+  function toggle(tag: string) {
+    const next = currentTags.includes(tag)
+      ? currentTags.filter((t) => t !== tag)
+      : [...currentTags, tag];
+    onUpdate(next);
+  }
+
+  if (allTags.length === 0) return null;
+
+  return (
+    <div className="relative" ref={ref}>
+      <button
+        onClick={() => setOpen((o) => !o)}
+        className="text-xs px-1.5 py-0.5 rounded text-muted-foreground hover:text-foreground border border-dashed hover:border-solid transition-all"
+        style={{ borderColor: "rgba(255,255,255,0.2)" }}
+      >
+        + tag
+      </button>
+      {open && (
+        <div className="absolute left-0 top-full mt-1 w-44 bg-card border rounded-lg shadow-xl py-1 z-20">
+          {allTags.map((tag) => (
+            <label
+              key={tag}
+              className="flex items-center gap-2 px-3 py-1.5 hover:bg-muted/50 cursor-pointer transition-colors"
+            >
+              <input
+                type="checkbox"
+                checked={currentTags.includes(tag)}
+                onChange={() => toggle(tag)}
+                className="accent-blue-500"
+              />
+              <span className="text-sm text-foreground">{tag}</span>
+            </label>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function AccountsPage() {
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [status, setStatus] = useState<Status | null>(null);
+  const [tagsData, setTagsData] = useState<TagsData>({ tags: [], account_tags: {} });
   const [input, setInput] = useState("");
   const [adding, setAdding] = useState(false);
   const [removing, setRemoving] = useState<string | null>(null);
   const [addedUser, setAddedUser] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [confirmUsername, setConfirmUsername] = useState<string | null>(null);
+  const [newTagInput, setNewTagInput] = useState("");
+  const [addingTag, setAddingTag] = useState(false);
+  const [tagError, setTagError] = useState<string | null>(null);
 
   function fetchAccounts() {
     fetch(`${API_BASE}/api/accounts`)
@@ -53,9 +149,16 @@ export default function AccountsPage() {
       .then(setStatus);
   }
 
+  function fetchTags() {
+    fetch(`${API_BASE}/api/tags`)
+      .then((r) => r.json())
+      .then(setTagsData);
+  }
+
   useEffect(() => {
     fetchAccounts();
     fetchStatus();
+    fetchTags();
   }, []);
 
   async function handleAdd() {
@@ -92,6 +195,40 @@ export default function AccountsPage() {
     setRemoving(null);
   }
 
+  async function handleCreateTag() {
+    const name = newTagInput.trim();
+    if (!name) return;
+    setAddingTag(true);
+    setTagError(null);
+    try {
+      const r = await fetch(`${API_BASE}/api/tags`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name }),
+      });
+      if (r.status === 409) { setTagError(`"${name}" already exists.`); return; }
+      if (!r.ok) { setTagError("Something went wrong."); return; }
+      setNewTagInput("");
+      fetchTags();
+    } finally {
+      setAddingTag(false);
+    }
+  }
+
+  async function handleDeleteTag(name: string) {
+    await fetch(`${API_BASE}/api/tags/${encodeURIComponent(name)}`, { method: "DELETE" });
+    fetchTags();
+  }
+
+  async function handleUpdateAccountTags(username: string, tags: string[]) {
+    await fetch(`${API_BASE}/api/accounts/${username}/tags`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ tags }),
+    });
+    fetchTags();
+  }
+
   const eta = status?.next_cycle_eta_minutes;
   const etaText = eta === null || eta === undefined
     ? "unknown"
@@ -126,59 +263,114 @@ export default function AccountsPage() {
       )}
 
       {/* Account list */}
-      <div className="bg-card rounded-lg border divide-y">
-        {accounts.map((a) => (
-          <div key={a.username} className="flex items-center justify-between px-4 py-3 gap-4">
-            {/* Left: avatar + username */}
-            <div className="flex items-center gap-3 min-w-0">
-              <Avatar username={a.username} size={32} />
-              <div className="min-w-0">
-                <a
-                  href={`https://x.com/${a.username}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-sm font-medium hover:underline text-blue-500 hover:text-blue-400"
-                >
-                  @{a.username}
-                </a>
-                {!a.baselined && (
-                  <span className="ml-2 text-xs text-muted-foreground">pending baseline</span>
-                )}
+      <div className="bg-card rounded-lg border divide-y mb-10">
+        {accounts.map((a) => {
+          const accountTags = tagsData.account_tags[a.username] ?? [];
+          return (
+            <div key={a.username} className="px-4 py-3">
+              <div className="flex items-center justify-between gap-4">
+                {/* Left: avatar + username */}
+                <div className="flex items-center gap-3 min-w-0">
+                  <Avatar username={a.username} size={32} />
+                  <div className="min-w-0">
+                    <a
+                      href={`https://x.com/${a.username}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-sm font-medium hover:underline text-blue-500 hover:text-blue-400"
+                    >
+                      @{a.username}
+                    </a>
+                    {!a.baselined && (
+                      <span className="ml-2 text-xs text-muted-foreground">pending baseline</span>
+                    )}
+                  </div>
+                </div>
+
+                {/* Right: stats + remove */}
+                <div className="flex items-center gap-5 shrink-0">
+                  <div className="text-right">
+                    <p className="text-sm text-muted-foreground">
+                      {a.following_count !== null ? `${a.following_count.toLocaleString()} following` : "—"}
+                    </p>
+                    {a.last_new_follow && (
+                      <p className="text-xs text-muted-foreground/60 mt-0.5">
+                        last follow {timeAgo(a.last_new_follow)}
+                      </p>
+                    )}
+                  </div>
+                  <div className="w-24 text-right">
+                    <p className="text-xs text-muted-foreground/50">
+                      {a.last_checked ? `checked ${timeAgo(a.last_checked)}` : "—"}
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => setConfirmUsername(a.username)}
+                    disabled={removing === a.username}
+                    className="text-muted-foreground hover:text-foreground transition-colors text-lg leading-none"
+                  >
+                    ×
+                  </button>
+                </div>
               </div>
+
+              {/* Tag row */}
+              {(tagsData.tags.length > 0) && (
+                <div className="flex items-center gap-1.5 mt-2 ml-11 flex-wrap">
+                  {accountTags.map((tag) => (
+                    <TagChip
+                      key={tag}
+                      label={tag}
+                      onRemove={() =>
+                        handleUpdateAccountTags(a.username, accountTags.filter((t) => t !== tag))
+                      }
+                    />
+                  ))}
+                  <TagPopover
+                    username={a.username}
+                    allTags={tagsData.tags}
+                    currentTags={accountTags}
+                    onUpdate={(tags) => handleUpdateAccountTags(a.username, tags)}
+                  />
+                </div>
+              )}
             </div>
+          );
+        })}
+      </div>
 
-            {/* Right: stats + remove */}
-            <div className="flex items-center gap-5 shrink-0">
-              {/* Following count + last follow */}
-              <div className="text-right">
-                <p className="text-sm text-muted-foreground">
-                  {a.following_count !== null ? `${a.following_count.toLocaleString()} following` : "—"}
-                </p>
-                {a.last_new_follow && (
-                  <p className="text-xs text-muted-foreground/60 mt-0.5">
-                    last follow {timeAgo(a.last_new_follow)}
-                  </p>
-                )}
-              </div>
+      {/* Tags section */}
+      <div>
+        <h2 className="text-lg font-semibold text-foreground mb-3">Tags</h2>
+        <p className="text-sm text-muted-foreground mb-4">
+          Create tags to categorize tracked accounts. Assign them inline above, filter by them on the feed.
+        </p>
 
-              {/* Last checked */}
-              <div className="w-24 text-right">
-                <p className="text-xs text-muted-foreground/50">
-                  {a.last_checked ? `checked ${timeAgo(a.last_checked)}` : "—"}
-                </p>
-              </div>
+        {/* Create tag */}
+        <div className="flex gap-2 mb-4">
+          <Input
+            placeholder="New tag name"
+            value={newTagInput}
+            onChange={(e) => { setNewTagInput(e.target.value); setTagError(null); }}
+            onKeyDown={(e) => e.key === "Enter" && handleCreateTag()}
+            className="flex-1"
+          />
+          <Button onClick={handleCreateTag} disabled={addingTag || !newTagInput.trim()} variant="outline">
+            {addingTag ? "Adding..." : "Create"}
+          </Button>
+        </div>
 
-              {/* Remove */}
-              <button
-                onClick={() => setConfirmUsername(a.username)}
-                disabled={removing === a.username}
-                className="text-muted-foreground hover:text-foreground transition-colors text-lg leading-none"
-              >
-                ×
-              </button>
-            </div>
+        {tagError && <p className="text-sm text-destructive mb-3">{tagError}</p>}
+
+        {tagsData.tags.length === 0 ? (
+          <p className="text-sm text-muted-foreground">No tags yet.</p>
+        ) : (
+          <div className="flex flex-wrap gap-2">
+            {tagsData.tags.map((tag) => (
+              <TagChip key={tag} label={tag} onRemove={() => handleDeleteTag(tag)} />
+            ))}
           </div>
-        ))}
+        )}
       </div>
 
       {/* Remove confirmation dialog */}
