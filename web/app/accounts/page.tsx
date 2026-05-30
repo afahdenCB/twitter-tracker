@@ -235,7 +235,9 @@ export default function AccountsPage() {
     : eta === 0 ? "any moment" : `~${eta} min`;
 
   return (
-    <div className="max-w-2xl">
+    <div className="flex gap-8">
+      {/* Left: account list */}
+      <div className="flex-1 min-w-0">
       <h1 className="text-2xl font-semibold text-foreground mb-6">Tracked Accounts</h1>
 
       {/* Add account */}
@@ -263,7 +265,7 @@ export default function AccountsPage() {
       )}
 
       {/* Account list */}
-      <div className="bg-card rounded-lg border divide-y mb-10">
+      <div className="bg-card rounded-lg border divide-y">
         {accounts.map((a) => {
           const accountTags = tagsData.account_tags[a.username] ?? [];
           return (
@@ -339,31 +341,29 @@ export default function AccountsPage() {
         })}
       </div>
 
-      {/* Tags section */}
-      <div>
-        <h2 className="text-lg font-semibold text-foreground mb-3">Tags</h2>
-        <p className="text-sm text-muted-foreground mb-4">
-          Create tags to categorize tracked accounts. Assign them inline above, filter by them on the feed.
-        </p>
+      </div>
 
-        {/* Create tag */}
-        <div className="flex gap-2 mb-4">
+      {/* Right: tags panel */}
+      <aside className="w-60 shrink-0">
+        <h2 className="text-2xl font-semibold text-foreground mb-6">Tags</h2>
+
+        <div className="flex gap-2 mb-3">
           <Input
-            placeholder="New tag name"
+            placeholder="New tag..."
             value={newTagInput}
             onChange={(e) => { setNewTagInput(e.target.value); setTagError(null); }}
             onKeyDown={(e) => e.key === "Enter" && handleCreateTag()}
             className="flex-1"
           />
-          <Button onClick={handleCreateTag} disabled={addingTag || !newTagInput.trim()} variant="outline">
-            {addingTag ? "Adding..." : "Create"}
+          <Button onClick={handleCreateTag} disabled={addingTag || !newTagInput.trim()} variant="outline" size="sm">
+            {addingTag ? "..." : "Create"}
           </Button>
         </div>
 
         {tagError && <p className="text-sm text-destructive mb-3">{tagError}</p>}
 
         {tagsData.tags.length === 0 ? (
-          <p className="text-sm text-muted-foreground">No tags yet.</p>
+          <p className="text-sm text-muted-foreground">No tags yet. Create one to start categorizing accounts.</p>
         ) : (
           <div className="flex flex-wrap gap-2">
             {tagsData.tags.map((tag) => (
@@ -371,7 +371,7 @@ export default function AccountsPage() {
             ))}
           </div>
         )}
-      </div>
+      </aside>
 
       {/* Remove confirmation dialog */}
       <Dialog.Root

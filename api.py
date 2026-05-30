@@ -186,6 +186,7 @@ def get_feed(
     offset: int = Query(0, ge=0),
     tracker: list[str] = Query(None),
     max_account_age_days: int = Query(None, ge=1),
+    bio_contains: str = Query(None),
 ):
     entries = storage.load_feed()
     if tracker:
@@ -197,5 +198,8 @@ def get_feed(
             e for e in entries
             if e.get("account_created_at") and e["account_created_at"] >= cutoff
         ]
+    if bio_contains:
+        needle = bio_contains.lower()
+        entries = [e for e in entries if needle in (e.get("bio") or "").lower()]
     entries.reverse()
     return {"items": entries[offset: offset + limit], "total": len(entries)}
