@@ -93,6 +93,11 @@ async def check_account(username: str) -> None:
         save_meta(username, {"user_id": user_id, "following_count": current_count, "checked_at": now_iso})
         return
 
+    # Save baseline BEFORE alerting — if the write fails the exception propagates
+    # and no alert fires, so we retry cleanly next cycle instead of spamming.
+    save_following(username, current_following)
+    save_meta(username, {"user_id": user_id, "following_count": current_count, "checked_at": now_iso})
+
     for user in new_follows:
         profile_url = f"https://x.com/{user['username']}"
         followers_str = _fmt_followers(user["followers_count"]) if user.get("followers_count") is not None else "?"
@@ -118,9 +123,6 @@ async def check_account(username: str) -> None:
             "detected_at": datetime.now(timezone.utc).isoformat(),
         })
         process_new_follow(user, username)
-
-    save_following(username, current_following)
-    save_meta(username, {"user_id": user_id, "following_count": current_count, "checked_at": now_iso})
 
 
 async def check_all() -> None:
