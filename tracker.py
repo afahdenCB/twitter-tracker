@@ -93,9 +93,14 @@ async def check_account(username: str) -> None:
         save_meta(username, {"user_id": user_id, "following_count": current_count, "checked_at": now_iso})
         return
 
-    # Save baseline BEFORE alerting — if the write fails the exception propagates
-    # and no alert fires, so we retry cleanly next cycle instead of spamming.
-    save_following(username, current_following)
+    # Merge with stored baseline so previously-seen accounts are never lost.
+    # Twitter's API returns inconsistent paginated results, which would otherwise
+    # overwrite the baseline without accounts that are genuinely still followed,
+    # causing them to re-appear as "new" on the next cycle.
+    # Save before alerting — if the write fails the exception propagates and no
+    # alert fires, so we retry cleanly next cycle instead of spamming.
+    merged_following = {**stored_following, **current_following}
+    save_following(username, merged_following)
     save_meta(username, {"user_id": user_id, "following_count": current_count, "checked_at": now_iso})
 
     for user in new_follows:
