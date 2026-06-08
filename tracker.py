@@ -82,6 +82,17 @@ async def check_account(username: str) -> None:
         return
     new_follows = [u for uid, u in current_following.items() if uid not in stored_following]
 
+    # Belt-and-suspenders: even if the baseline gets out of sync, never alert
+    # for a follow that's already recorded in the feed.
+    if new_follows:
+        feed = storage.load_feed()
+        alerted_ids = {e["followed_id"] for e in feed if e.get("tracker") == username}
+        deduplicated = [u for u in new_follows if u["id"] not in alerted_ids]
+        suppressed = len(new_follows) - len(deduplicated)
+        if suppressed:
+            logger.warning(f"@{username}: suppressed {suppressed} duplicate alert(s) already in feed")
+        new_follows = deduplicated
+
     # If an implausibly large number of "new" follows appear in one cycle, the
     # baseline is stale or corrupt. Re-baseline silently rather than spamming.
     if len(new_follows) > 25:
@@ -89,7 +100,7 @@ async def check_account(username: str) -> None:
             f"@{username}: {len(new_follows)} new follows detected in one cycle — "
             f"baseline looks stale, re-baselining silently"
         )
-        save_following(username, current_following)
+        save_following(username, {**stored_following, **current_following})
         save_meta(username, {"user_id": user_id, "following_count": current_count, "checked_at": now_iso})
         return
 
