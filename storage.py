@@ -84,3 +84,11 @@ def load_tags() -> dict:
 
 def save_tags(data: dict) -> None:
     _write_json("tags.json", data, indent=2)
+
+
+def load_outreach() -> dict:
+    return _read_json("outreach.json", {})
+
+
+def save_outreach(data: dict) -> None:
+    _write_json("outreach.json", data, indent=2)

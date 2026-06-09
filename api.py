@@ -203,3 +203,23 @@ def get_feed(
         entries = [e for e in entries if needle in (e.get("bio") or "").lower()]
     entries.reverse()
     return {"items": entries[offset: offset + limit], "total": len(entries)}
+
+
+@app.get("/api/outreach")
+def get_outreach():
+    return storage.load_outreach()
+
+
+class SetOutreachBody(BaseModel):
+    status: str | None  # "reached_out" | "in_contact" | None to clear
+
+
+@app.put("/api/outreach/{user_id}")
+def set_outreach(user_id: str, body: SetOutreachBody):
+    data = storage.load_outreach()
+    if body.status is None:
+        data.pop(user_id, None)
+    else:
+        data[user_id] = body.status
+    storage.save_outreach(data)
+    return data
