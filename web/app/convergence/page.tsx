@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import Avatar from "@/components/Avatar";
 import API_BASE from "@/lib/api";
 import {
@@ -26,6 +26,14 @@ interface ConvergenceEntry {
   count: number;
   latest_follow: string;
 }
+
+type OutreachStatus = "reached_out" | "in_contact";
+type Outreach = Record<string, OutreachStatus>;
+
+const STATUSES: { value: OutreachStatus; label: string; next: OutreachStatus | null }[] = [
+  { value: "reached_out", label: "Reached out", next: "in_contact" },
+  { value: "in_contact",  label: "In contact",  next: null },
+];
 
 function timeAgo(iso: string) {
   const mins = Math.floor((Date.now() - new Date(iso).getTime()) / 60000);
@@ -79,10 +87,59 @@ function EmptyState() {
   );
 }
 
+function OutreachButton({
+  userId,
+  status,
+  onChange,
+}: {
+  userId: string;
+  status: OutreachStatus | undefined;
+  onChange: (userId: string, next: OutreachStatus | null) => void;
+}) {
+  const current = STATUSES.find((s) => s.value === status);
+
+  if (!status) {
+    return (
+      <button
+        onClick={() => onChange(userId, "reached_out")}
+        className="text-xs text-muted-foreground border border-dashed border-border rounded-full px-3 py-1 hover:border-foreground/40 hover:text-foreground transition-colors"
+      >
+        + Mark contacted
+      </button>
+    );
+  }
+
+  const nextStatus = current?.next ?? null;
+  const isInContact = status === "in_contact";
+
+  return (
+    <div className="flex items-center gap-1.5">
+      <button
+        onClick={() => onChange(userId, nextStatus)}
+        className={`text-xs rounded-full px-3 py-1 font-medium transition-colors ${
+          isInContact
+            ? "bg-green-500/15 text-green-400 hover:bg-green-500/25"
+            : "bg-yellow-500/15 text-yellow-400 hover:bg-yellow-500/25"
+        }`}
+      >
+        {current?.label} {nextStatus ? "→" : "✓"}
+      </button>
+      <button
+        onClick={() => onChange(userId, null)}
+        className="text-muted-foreground/50 hover:text-muted-foreground transition-colors text-xs"
+        title="Clear"
+      >
+        ✕
+      </button>
+    </div>
+  );
+}
+
 export default function ConvergencePage() {
   const [entries, setEntries] = useState<ConvergenceEntry[]>([]);
   const [minCount, setMinCount] = useState("2");
   const [days, setDays] = useState("all");
+  const [outreach, setOutreach] = useState<Outreach>({});
 
   useEffect(() => {
     const params = new URLSearchParams({ min_count: minCount });
@@ -91,6 +148,29 @@ export default function ConvergencePage() {
       .then((r) => r.json())
       .then(setEntries);
   }, [minCount, days]);
+
+  useEffect(() => {
+    fetch(`${API_BASE}/api/outreach`)
+      .then((r) => r.json())
+      .then(setOutreach);
+  }, []);
+
+  const handleOutreachChange = useCallback(
+    (userId: string, next: OutreachStatus | null) => {
+      setOutreach((prev) => {
+        const updated = { ...prev };
+        if (next === null) delete updated[userId];
+        else updated[userId] = next;
+        return updated;
+      });
+      fetch(`${API_BASE}/api/outreach/${userId}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: next }),
+      });
+    },
+    []
+  );
 
   return (
     <div>
@@ -132,9 +212,15 @@ export default function ConvergencePage() {
         <div className="space-y-3">
           {entries.map((e) => {
             const followersStr = fmtFollowers(e.followers_count);
+            const status = outreach[e.user_id];
             return (
-              <div key={e.user_id} className="bg-card rounded-lg border p-5">
-                {/* Header: avatar + account info + timestamp */}
+              <div
+                key={e.user_id}
+                className={`bg-card rounded-lg border p-5 transition-opacity ${
+                  status ? "opacity-60" : ""
+                }`}
+              >
+                {/* Header: avatar + account info + outreach button */}
                 <div className="flex items-start justify-between gap-4 mb-4">
                   <div className="flex items-start gap-4 flex-1 min-w-0">
                     <Avatar username={e.username} size={48} />
@@ -160,9 +246,14 @@ export default function ConvergencePage() {
                       )}
                     </div>
                   </div>
-                  <span className="text-xs text-muted-foreground shrink-0 mt-0.5">
-                    {timeAgo(e.latest_follow)}
-                  </span>
+                  <div className="flex flex-col items-end gap-2 shrink-0">
+                    <span className="text-xs text-muted-foreground">{timeAgo(e.latest_follow)}</span>
+                    <OutreachButton
+                      userId={e.user_id}
+                      status={status}
+                      onChange={handleOutreachChange}
+                    />
+                  </div>
                 </div>
 
                 {/* Tracker row */}
