@@ -1,10 +1,66 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import Avatar from "@/components/Avatar";
 import API_BASE from "@/lib/api";
+
+type OutreachStatus = "reached_out" | "in_contact";
+type Outreach = Record<string, OutreachStatus>;
+
+const STATUSES: { value: OutreachStatus; label: string; next: OutreachStatus | null }[] = [
+  { value: "reached_out", label: "Reached out", next: "in_contact" },
+  { value: "in_contact",  label: "In contact",  next: null },
+];
+
+function OutreachButton({
+  userId,
+  status,
+  onChange,
+}: {
+  userId: string;
+  status: OutreachStatus | undefined;
+  onChange: (userId: string, next: OutreachStatus | null) => void;
+}) {
+  const current = STATUSES.find((s) => s.value === status);
+
+  if (!status) {
+    return (
+      <button
+        onClick={() => onChange(userId, "reached_out")}
+        className="text-xs text-muted-foreground border border-dashed border-border rounded-full px-3 py-1 hover:border-foreground/40 hover:text-foreground transition-colors"
+      >
+        + Mark contacted
+      </button>
+    );
+  }
+
+  const nextStatus = current?.next ?? null;
+  const isInContact = status === "in_contact";
+
+  return (
+    <div className="flex items-center gap-1.5">
+      <button
+        onClick={() => onChange(userId, nextStatus)}
+        className={`text-xs rounded-full px-3 py-1 font-medium transition-colors ${
+          isInContact
+            ? "bg-green-500/15 text-green-400 hover:bg-green-500/25"
+            : "bg-yellow-500/15 text-yellow-400 hover:bg-yellow-500/25"
+        }`}
+      >
+        {current?.label} {nextStatus ? "→" : "✓"}
+      </button>
+      <button
+        onClick={() => onChange(userId, null)}
+        className="text-muted-foreground/50 hover:text-muted-foreground transition-colors text-xs"
+        title="Clear"
+      >
+        ✕
+      </button>
+    </div>
+  );
+}
 
 const PAGE_SIZE = 20;
 
@@ -86,6 +142,7 @@ export default function FeedPage() {
   const [maxAgeDays, setMaxAgeDays] = useState<number | null>(null);
   const [bioKeyword, setBioKeyword] = useState("");
   const [debouncedBioKeyword, setDebouncedBioKeyword] = useState("");
+  const [outreach, setOutreach] = useState<Outreach>({});
 
   useEffect(() => {
     fetch(`${API_BASE}/api/accounts`)
@@ -96,7 +153,27 @@ export default function FeedPage() {
     fetch(`${API_BASE}/api/tags`)
       .then((r) => r.json())
       .then(setTagsData);
+    fetch(`${API_BASE}/api/outreach`)
+      .then((r) => r.json())
+      .then(setOutreach);
   }, []);
+
+  const handleOutreachChange = useCallback(
+    (userId: string, next: OutreachStatus | null) => {
+      setOutreach((prev) => {
+        const updated = { ...prev };
+        if (next === null) delete updated[userId];
+        else updated[userId] = next;
+        return updated;
+      });
+      fetch(`${API_BASE}/api/outreach/${userId}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: next }),
+      });
+    },
+    []
+  );
 
   useEffect(() => {
     const timer = setTimeout(() => setDebouncedBioKeyword(bioKeyword), 300);
@@ -259,10 +336,11 @@ export default function FeedPage() {
             <div className="space-y-2">
               {entries.map((e, i) => {
                 const { text: tsText, className: tsClass } = timestampMeta(e.detected_at);
+                const outreachStatus = outreach[e.followed_id];
                 return (
                   <div
                     key={i}
-                    className="bg-card rounded-lg p-4"
+                    className={`bg-card rounded-lg p-4 transition-opacity ${outreachStatus ? "opacity-60" : ""}`}
                     style={{ border: "1px solid rgba(255,255,255,0.06)" }}
                   >
                     <div className="flex items-start justify-between gap-4">
@@ -312,7 +390,14 @@ export default function FeedPage() {
                           </div>
                         </div>
                       </div>
-                      <span className={`text-xs shrink-0 mt-0.5 ${tsClass}`}>{tsText}</span>
+                      <div className="flex flex-col items-end gap-2 shrink-0">
+                        <span className={`text-xs ${tsClass}`}>{tsText}</span>
+                        <OutreachButton
+                          userId={e.followed_id}
+                          status={outreachStatus}
+                          onChange={handleOutreachChange}
+                        />
+                      </div>
                     </div>
                   </div>
                 );
