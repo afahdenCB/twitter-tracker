@@ -14,6 +14,18 @@ const STATUSES: { value: OutreachStatus; label: string; next: OutreachStatus | n
   { value: "in_contact",  label: "In contact",  next: null },
 ];
 
+function ArchiveButton({ onArchive }: { onArchive: () => void }) {
+  return (
+    <button
+      onClick={onArchive}
+      className="text-xs text-muted-foreground/40 hover:text-muted-foreground transition-colors"
+      title="Move to Reviewed"
+    >
+      Archive
+    </button>
+  );
+}
+
 function OutreachButton({
   userId,
   status,
@@ -143,6 +155,7 @@ export default function FeedPage() {
   const [bioKeyword, setBioKeyword] = useState("");
   const [debouncedBioKeyword, setDebouncedBioKeyword] = useState("");
   const [outreach, setOutreach] = useState<Outreach>({});
+  const [archived, setArchived] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     fetch(`${API_BASE}/api/accounts`)
@@ -156,6 +169,11 @@ export default function FeedPage() {
     fetch(`${API_BASE}/api/outreach`)
       .then((r) => r.json())
       .then(setOutreach);
+  }, []);
+
+  const handleArchive = useCallback((userId: string) => {
+    setArchived((prev) => new Set([...prev, userId]));
+    fetch(`${API_BASE}/api/reviewed/${userId}`, { method: "PUT" });
   }, []);
 
   const handleOutreachChange = useCallback(
@@ -201,6 +219,7 @@ export default function FeedPage() {
     const params = new URLSearchParams({
       limit: String(PAGE_SIZE),
       offset: String(page * PAGE_SIZE),
+      exclude_reviewed: "true",
     });
 
     if (isFiltered) {
@@ -334,7 +353,7 @@ export default function FeedPage() {
         ) : (
           <>
             <div className="space-y-2">
-              {entries.map((e, i) => {
+              {entries.filter((e) => !archived.has(e.followed_id)).map((e, i) => {
                 const { text: tsText, className: tsClass } = timestampMeta(e.detected_at);
                 const outreachStatus = outreach[e.followed_id];
                 return (
@@ -397,6 +416,7 @@ export default function FeedPage() {
                           status={outreachStatus}
                           onChange={handleOutreachChange}
                         />
+                        <ArchiveButton onArchive={() => handleArchive(e.followed_id)} />
                       </div>
                     </div>
                   </div>

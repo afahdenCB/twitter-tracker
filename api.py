@@ -187,6 +187,7 @@ def get_feed(
     tracker: list[str] = Query(None),
     max_account_age_days: int = Query(None, ge=1),
     bio_contains: str = Query(None),
+    exclude_reviewed: bool = Query(False),
 ):
     entries = storage.load_feed()
     if tracker:
@@ -201,6 +202,9 @@ def get_feed(
     if bio_contains:
         needle = bio_contains.lower()
         entries = [e for e in entries if needle in (e.get("bio") or "").lower()]
+    if exclude_reviewed:
+        reviewed_ids = set(storage.load_reviewed().keys())
+        entries = [e for e in entries if e.get("followed_id") not in reviewed_ids]
     entries.reverse()
     return {"items": entries[offset: offset + limit], "total": len(entries)}
 
@@ -222,4 +226,53 @@ def set_outreach(user_id: str, body: SetOutreachBody):
     else:
         data[user_id] = body.status
     storage.save_outreach(data)
+    return data
+
+
+@app.get("/api/reviewed/entries")
+def get_reviewed_entries():
+    reviewed_ids = set(storage.load_reviewed().keys())
+    if not reviewed_ids:
+        return []
+    results: dict[str, dict] = {}
+    for user_id, entry in storage.load_convergence().items():
+        if user_id in reviewed_ids:
+            results[user_id] = {
+                "user_id": user_id,
+                "username": entry["username"],
+                "name": entry["name"],
+                "bio": entry.get("bio", ""),
+                "followers_count": entry.get("followers_count"),
+            }
+    for entry in storage.load_feed():
+        user_id = entry.get("followed_id", "")
+        if user_id in reviewed_ids and user_id not in results:
+            results[user_id] = {
+                "user_id": user_id,
+                "username": entry.get("followed_username", ""),
+                "name": entry.get("followed_name", ""),
+                "bio": entry.get("bio", ""),
+                "followers_count": entry.get("followers_count"),
+            }
+    return list(results.values())
+
+
+@app.get("/api/reviewed")
+def get_reviewed():
+    return storage.load_reviewed()
+
+
+@app.put("/api/reviewed/{user_id}")
+def mark_reviewed(user_id: str):
+    data = storage.load_reviewed()
+    data[user_id] = True
+    storage.save_reviewed(data)
+    return data
+
+
+@app.delete("/api/reviewed/{user_id}")
+def unmark_reviewed(user_id: str):
+    data = storage.load_reviewed()
+    data.pop(user_id, None)
+    storage.save_reviewed(data)
     return data

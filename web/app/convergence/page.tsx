@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useMemo } from "react";
 import Avatar from "@/components/Avatar";
 import API_BASE from "@/lib/api";
 import {
@@ -87,6 +87,18 @@ function EmptyState() {
   );
 }
 
+function ArchiveButton({ onArchive }: { onArchive: () => void }) {
+  return (
+    <button
+      onClick={onArchive}
+      className="text-xs text-muted-foreground/40 hover:text-muted-foreground transition-colors"
+      title="Move to Reviewed"
+    >
+      Archive
+    </button>
+  );
+}
+
 function OutreachButton({
   userId,
   status,
@@ -140,6 +152,7 @@ export default function ConvergencePage() {
   const [minCount, setMinCount] = useState("2");
   const [days, setDays] = useState("all");
   const [outreach, setOutreach] = useState<Outreach>({});
+  const [archived, setArchived] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     const params = new URLSearchParams({ min_count: minCount });
@@ -153,6 +166,11 @@ export default function ConvergencePage() {
     fetch(`${API_BASE}/api/outreach`)
       .then((r) => r.json())
       .then(setOutreach);
+  }, []);
+
+  const handleArchive = useCallback((userId: string) => {
+    setArchived((prev) => new Set([...prev, userId]));
+    fetch(`${API_BASE}/api/reviewed/${userId}`, { method: "PUT" });
   }, []);
 
   const handleOutreachChange = useCallback(
@@ -210,7 +228,7 @@ export default function ConvergencePage() {
         <EmptyState />
       ) : (
         <div className="space-y-3">
-          {entries.map((e) => {
+          {entries.filter((e) => !archived.has(e.user_id)).map((e) => {
             const followersStr = fmtFollowers(e.followers_count);
             const status = outreach[e.user_id];
             return (
@@ -253,6 +271,7 @@ export default function ConvergencePage() {
                       status={status}
                       onChange={handleOutreachChange}
                     />
+                    <ArchiveButton onArchive={() => handleArchive(e.user_id)} />
                   </div>
                 </div>
 

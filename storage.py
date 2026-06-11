@@ -92,3 +92,11 @@ def load_outreach() -> dict:
 
 def save_outreach(data: dict) -> None:
     _write_json("outreach.json", data, indent=2)
+
+
+def load_reviewed() -> dict:
+    return _read_json("reviewed.json", {})
+
+
+def save_reviewed(data: dict) -> None:
+    _write_json("reviewed.json", data, indent=2)
