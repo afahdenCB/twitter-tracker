@@ -3,7 +3,7 @@ import logging
 import random
 from datetime import datetime, timezone
 from twitter_client import get_user_info, get_following
-from storage import load_following, save_following, load_meta, save_meta, append_feed
+from storage import load_following, save_following, load_meta, save_meta, append_feed, load_feed
 from telegram_notifier import send_message
 from signals import process_new_follow
 
@@ -85,7 +85,7 @@ async def check_account(username: str) -> None:
     # Belt-and-suspenders: even if the baseline gets out of sync, never alert
     # for a follow that's already recorded in the feed.
     if new_follows:
-        feed = storage.load_feed()
+        feed = load_feed()
         alerted_ids = {e["followed_id"] for e in feed if e.get("tracker") == username}
         deduplicated = [u for u in new_follows if u["id"] not in alerted_ids]
         suppressed = len(new_follows) - len(deduplicated)
