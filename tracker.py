@@ -9,6 +9,12 @@ from signals import process_new_follow
 
 logger = logging.getLogger(__name__)
 
+# Number of full-fetch cycles to accumulate before alerting on any account.
+# Pagination from Twitter's API is unstable — a single fetch can silently miss
+# 10–20% of an account's follows. Accumulating over multiple cycles fills those
+# gaps before alerts are enabled, eliminating false positives from baseline holes.
+BASELINE_CYCLES_REQUIRED = 3
+
 
 def _fmt_followers(count: int) -> str:
     if count >= 1_000_000:
@@ -57,20 +63,50 @@ async def check_account(username: str) -> None:
     meta = load_meta(username)
     stored_count = meta.get("following_count")
     stored_following = load_following(username)
+    baseline_complete = meta.get("baseline_complete", False)
+    baseline_cycles = meta.get("baseline_cycles", 0)
 
     now_iso = datetime.now(timezone.utc).isoformat()
 
-    # First run: establish baseline without alerting
-    if not stored_following:
+    # Baseline-building mode: accumulate BASELINE_CYCLES_REQUIRED full fetches
+    # before alerting. This compensates for Twitter's unstable pagination — a
+    # single fetch can silently miss 10–20% of an account's follows, and those
+    # gaps would fire as false-positive alerts once the count changes.
+    # Defaults to False so existing accounts re-accumulate on the next deploy.
+    if not baseline_complete:
+        cycle_num = baseline_cycles + 1
+        is_first_run = not stored_following
+        label = "first run" if is_first_run else f"cycle {cycle_num}/{BASELINE_CYCLES_REQUIRED}"
+        logger.info(f"@{username}: baseline building ({label}), fetching full list...")
+
         current_following = {u["id"]: u for u in await get_following(user_id)}
-        if _is_partial_fetch(current_following, current_count, username):
+
+        if not current_following:
+            logger.warning(f"@{username}: empty fetch during baseline building ({label}), skipping")
             return
-        logger.info(f"First run for @{username}: stored {len(current_following)} accounts as baseline")
-        save_following(username, current_following)
-        save_meta(username, {"user_id": user_id, "following_count": current_count, "checked_at": now_iso})
+
+        merged = {**stored_following, **current_following}
+        is_complete = cycle_num >= BASELINE_CYCLES_REQUIRED
+        coverage = min(len(merged) / current_count, 1.0) if current_count > 0 else 1.0
+
+        logger.info(
+            f"@{username}: baseline {label} — {len(merged)} accounts in baseline "
+            f"({coverage:.0%} of reported {current_count})"
+            + (" — COMPLETE, alerting now enabled" if is_complete else "")
+        )
+
+        save_following(username, merged)
+        save_meta(username, {
+            **meta,
+            "user_id": user_id,
+            "following_count": current_count,
+            "checked_at": now_iso,
+            "baseline_complete": is_complete,
+            "baseline_cycles": cycle_num,
+        })
         return
 
-    # Skip full fetch if following count hasn't changed
+    # Normal alert mode: skip full fetch if following count hasn't changed
     if current_count == stored_count:
         logger.info(f"@{username}: following count unchanged ({current_count}), skipping full fetch")
         save_meta(username, {**meta, "checked_at": now_iso})
@@ -101,18 +137,14 @@ async def check_account(username: str) -> None:
             f"baseline looks stale, re-baselining silently"
         )
         save_following(username, {**stored_following, **current_following})
-        save_meta(username, {"user_id": user_id, "following_count": current_count, "checked_at": now_iso})
+        save_meta(username, {**meta, "user_id": user_id, "following_count": current_count, "checked_at": now_iso})
         return
 
-    # Merge with stored baseline so previously-seen accounts are never lost.
-    # Twitter's API returns inconsistent paginated results, which would otherwise
-    # overwrite the baseline without accounts that are genuinely still followed,
-    # causing them to re-appear as "new" on the next cycle.
-    # Save before alerting — if the write fails the exception propagates and no
-    # alert fires, so we retry cleanly next cycle instead of spamming.
+    # Save merged baseline before alerting — if the write fails the exception
+    # propagates before any notification fires, ensuring clean retry next cycle.
     merged_following = {**stored_following, **current_following}
     save_following(username, merged_following)
-    save_meta(username, {"user_id": user_id, "following_count": current_count, "checked_at": now_iso})
+    save_meta(username, {**meta, "user_id": user_id, "following_count": current_count, "checked_at": now_iso})
 
     for user in new_follows:
         profile_url = f"https://x.com/{user['username']}"
