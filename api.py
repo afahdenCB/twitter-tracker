@@ -117,6 +117,7 @@ def get_convergence(
             "name": entry["name"],
             "bio": entry.get("bio", ""),
             "followers_count": entry.get("followers_count"),
+            "account_created_at": entry.get("account_created_at"),
             "followed_by": [
                 {"tracker": acct, "at": ts}
                 for acct, ts in sorted(filtered.items(), key=lambda x: x[1])
@@ -186,6 +187,7 @@ def get_feed(
     offset: int = Query(0, ge=0),
     tracker: list[str] = Query(None),
     max_account_age_days: int = Query(None, ge=1),
+    max_followers: int = Query(None, ge=0),
     bio_contains: str = Query(None),
     exclude_reviewed: bool = Query(False),
 ):
@@ -198,6 +200,11 @@ def get_feed(
         entries = [
             e for e in entries
             if e.get("account_created_at") and e["account_created_at"] >= cutoff
+        ]
+    if max_followers is not None:
+        entries = [
+            e for e in entries
+            if e.get("followers_count") is not None and e["followers_count"] <= max_followers
         ]
     if bio_contains:
         needle = bio_contains.lower()

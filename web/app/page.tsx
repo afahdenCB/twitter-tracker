@@ -101,6 +101,16 @@ const AGE_OPTIONS: { label: string; days: number | null }[] = [
   { label: "< 1 year", days: 365 },
 ];
 
+const FOLLOWERS_OPTIONS: { label: string; max: number | null }[] = [
+  { label: "Any count", max: null },
+  { label: "< 100", max: 100 },
+  { label: "< 500", max: 500 },
+  { label: "< 1K", max: 1000 },
+  { label: "< 5K", max: 5000 },
+  { label: "< 10K", max: 10000 },
+  { label: "< 50K", max: 50000 },
+];
+
 function fmtAge(iso: string | null): string | null {
   if (!iso) return null;
   const days = Math.floor((Date.now() - new Date(iso).getTime()) / 86400000);
@@ -152,6 +162,7 @@ export default function FeedPage() {
   const [selectedTags, setSelectedTags] = useState<Set<string>>(new Set());
   const [selectedAccounts, setSelectedAccounts] = useState<Set<string>>(new Set());
   const [maxAgeDays, setMaxAgeDays] = useState<number | null>(null);
+  const [maxFollowers, setMaxFollowers] = useState<number | null>(null);
   const [bioKeyword, setBioKeyword] = useState("");
   const [debouncedBioKeyword, setDebouncedBioKeyword] = useState("");
   const [outreach, setOutreach] = useState<Outreach>({});
@@ -200,7 +211,7 @@ export default function FeedPage() {
 
   useEffect(() => {
     setPage(0);
-  }, [selectedTags, selectedAccounts, maxAgeDays, debouncedBioKeyword]);
+  }, [selectedTags, selectedAccounts, maxAgeDays, maxFollowers, debouncedBioKeyword]);
 
   useEffect(() => {
     // Compute effective trackers: accounts matching any selected tag UNION individually selected accounts
@@ -230,6 +241,10 @@ export default function FeedPage() {
       params.set("max_account_age_days", String(maxAgeDays));
     }
 
+    if (maxFollowers !== null) {
+      params.set("max_followers", String(maxFollowers));
+    }
+
     if (debouncedBioKeyword.trim()) {
       params.set("bio_contains", debouncedBioKeyword.trim());
     }
@@ -240,7 +255,7 @@ export default function FeedPage() {
         setEntries(data.items);
         setTotal(data.total);
       });
-  }, [selectedTags, selectedAccounts, maxAgeDays, debouncedBioKeyword, page, trackers, tagsData]);
+  }, [selectedTags, selectedAccounts, maxAgeDays, maxFollowers, debouncedBioKeyword, page, trackers, tagsData]);
 
   const totalPages = Math.ceil(total / PAGE_SIZE);
   const isFiltered = selectedTags.size > 0 || selectedAccounts.size > 0;
@@ -329,6 +344,20 @@ export default function FeedPage() {
             ))}
           </select>
         </SidebarSection>
+
+        <SidebarSection title="Follower count">
+          <select
+            value={maxFollowers ?? ""}
+            onChange={(e) => setMaxFollowers(e.target.value === "" ? null : Number(e.target.value))}
+            className="w-full text-sm border rounded-md px-2 py-1.5 bg-card text-foreground"
+          >
+            {FOLLOWERS_OPTIONS.map((opt) => (
+              <option key={opt.label} value={opt.max ?? ""}>
+                {opt.label}
+              </option>
+            ))}
+          </select>
+        </SidebarSection>
       </aside>
 
       {/* Feed */}
@@ -367,8 +396,11 @@ export default function FeedPage() {
                         <Avatar username={e.followed_username} size={40} />
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-2 flex-wrap">
-                            <span
-                              className="text-xs font-medium px-2 py-0.5 rounded-md shrink-0"
+                            <a
+                              href={`https://x.com/${e.tracker}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-xs font-medium px-2 py-0.5 rounded-md shrink-0 hover:opacity-80 transition-opacity"
                               style={{
                                 background: "rgba(59,130,246,0.15)",
                                 border: "1px solid rgba(59,130,246,0.4)",
@@ -376,7 +408,7 @@ export default function FeedPage() {
                               }}
                             >
                               @{e.tracker}
-                            </span>
+                            </a>
                             <span className="text-sm text-muted-foreground">followed</span>
                             <a
                               href={`https://x.com/${e.followed_username}`}

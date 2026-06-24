@@ -22,6 +22,7 @@ interface ConvergenceEntry {
   name: string;
   bio: string;
   followers_count: number | null;
+  account_created_at: string | null;
   followed_by: Follow[];
   count: number;
   latest_follow: string;
@@ -33,6 +34,25 @@ type Outreach = Record<string, OutreachStatus>;
 const STATUSES: { value: OutreachStatus; label: string; next: OutreachStatus | null }[] = [
   { value: "reached_out", label: "Reached out", next: "in_contact" },
   { value: "in_contact",  label: "In contact",  next: null },
+];
+
+const AGE_OPTIONS: { label: string; days: number | null }[] = [
+  { label: "Any age", days: null },
+  { label: "< 1 week", days: 7 },
+  { label: "< 1 month", days: 30 },
+  { label: "< 3 months", days: 90 },
+  { label: "< 6 months", days: 180 },
+  { label: "< 1 year", days: 365 },
+];
+
+const FOLLOWERS_OPTIONS: { label: string; max: number | null }[] = [
+  { label: "Any count", max: null },
+  { label: "< 100", max: 100 },
+  { label: "< 500", max: 500 },
+  { label: "< 1K", max: 1000 },
+  { label: "< 5K", max: 5000 },
+  { label: "< 10K", max: 10000 },
+  { label: "< 50K", max: 50000 },
 ];
 
 function timeAgo(iso: string) {
@@ -151,6 +171,8 @@ export default function ConvergencePage() {
   const [entries, setEntries] = useState<ConvergenceEntry[]>([]);
   const [minCount, setMinCount] = useState("2");
   const [days, setDays] = useState("all");
+  const [maxFollowers, setMaxFollowers] = useState<number | null>(null);
+  const [maxAgeDays, setMaxAgeDays] = useState<number | null>(null);
   const [outreach, setOutreach] = useState<Outreach>({});
   const [archived, setArchived] = useState<Set<string>>(new Set());
 
@@ -190,11 +212,75 @@ export default function ConvergencePage() {
     []
   );
 
+  const filtered = useMemo(() => {
+    let result = entries.filter((e) => !archived.has(e.user_id));
+
+    if (maxFollowers !== null) {
+      result = result.filter(
+        (e) => e.followers_count !== null && e.followers_count <= maxFollowers
+      );
+    }
+
+    if (maxAgeDays !== null) {
+      const cutoff = Date.now() - maxAgeDays * 86400000;
+      result = result.filter(
+        (e) =>
+          e.account_created_at !== null &&
+          e.account_created_at !== undefined &&
+          new Date(e.account_created_at).getTime() >= cutoff
+      );
+    }
+
+    return result;
+  }, [entries, archived, maxFollowers, maxAgeDays]);
+
   return (
     <div>
       <div className="flex items-end justify-between mb-6">
-        <h1 className="text-2xl font-semibold text-foreground">Convergence</h1>
+        <div className="flex items-center gap-2">
+          <h1 className="text-2xl font-semibold text-foreground">Convergence</h1>
+          <div className="relative group">
+            <span className="text-muted-foreground/50 cursor-help text-sm select-none">ⓘ</span>
+            <div className="absolute left-0 top-full mt-2 z-10 pointer-events-none hidden group-hover:block w-64 text-xs text-muted-foreground bg-popover border border-border rounded-md p-2.5 shadow-md leading-relaxed">
+              Accounts followed by 2+ tracked VCs. More trackers = stronger signal. Useful for spotting founders early before they&apos;re widely known.
+            </div>
+          </div>
+        </div>
         <div className="flex gap-4">
+          <FilterGroup label="Account age">
+            <Select
+              value={maxAgeDays !== null ? String(maxAgeDays) : "all"}
+              onValueChange={(v) => setMaxAgeDays(v === "all" ? null : Number(v))}
+            >
+              <SelectTrigger className="w-36">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {AGE_OPTIONS.map((opt) => (
+                  <SelectItem key={opt.label} value={opt.days !== null ? String(opt.days) : "all"}>
+                    {opt.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </FilterGroup>
+          <FilterGroup label="Follower count">
+            <Select
+              value={maxFollowers !== null ? String(maxFollowers) : "all"}
+              onValueChange={(v) => setMaxFollowers(v === "all" ? null : Number(v))}
+            >
+              <SelectTrigger className="w-32">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {FOLLOWERS_OPTIONS.map((opt) => (
+                  <SelectItem key={opt.label} value={opt.max !== null ? String(opt.max) : "all"}>
+                    {opt.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </FilterGroup>
           <FilterGroup label="Time range">
             <Select value={days} onValueChange={(v) => v !== null && setDays(v)}>
               <SelectTrigger className="w-32">
@@ -224,11 +310,11 @@ export default function ConvergencePage() {
         </div>
       </div>
 
-      {entries.length === 0 ? (
+      {filtered.length === 0 ? (
         <EmptyState />
       ) : (
         <div className="space-y-3">
-          {entries.filter((e) => !archived.has(e.user_id)).map((e) => {
+          {filtered.map((e) => {
             const followersStr = fmtFollowers(e.followers_count);
             const status = outreach[e.user_id];
             return (
@@ -283,10 +369,16 @@ export default function ConvergencePage() {
                   </p>
                   <div className="flex flex-wrap gap-5">
                     {e.followed_by.map((f) => (
-                      <div key={f.tracker} className="flex flex-col items-center gap-1.5">
+                      <a
+                        key={f.tracker}
+                        href={`https://x.com/${f.tracker}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex flex-col items-center gap-1.5 hover:opacity-75 transition-opacity"
+                      >
                         <Avatar username={f.tracker} size={28} />
                         <span className="text-xs text-muted-foreground">@{f.tracker}</span>
-                      </div>
+                      </a>
                     ))}
                   </div>
                 </div>
